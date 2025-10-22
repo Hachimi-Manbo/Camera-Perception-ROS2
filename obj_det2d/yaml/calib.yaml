@@ -1,0 +1,33 @@
+%YAML:1.0
+---
+calibration_time: "2024-12-10 16:20:19"
+Resolution width: 1920
+Resolution height: 1080
+flags: 1
+CameraMatrix: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [978.079288700376, 0.0, 996.1371717521513, 
+         0.0, 975.9671288330107, 521.1450752999336,
+         0.0, 0.0, 1.0]
+DistortionCoeffs: !!opencv-matrix
+   rows: 4
+   cols: 1
+   dt: d
+   data: [-0.03800589882031582, -0.014788997947950525, 0.008163598657369977, -0.0023654731265608797]
+DFOV: 128.
+HFOV: 121.
+VFOV: 66.
+RotationMatrix: !!opencv-matrix
+   rows: 3
+   cols: 3
+   dt: d
+   data: [ 0., 0., 1.,
+        -1., 0., 0.,
+        0., -1., 0. ]
+TranslationVector: !!opencv-matrix
+   rows: 3
+   cols: 1
+   dt: d
+   data: [ 0.0, 0.0, 1750.73 ]

@@ -1,0 +1,4 @@
+# TrafficLightRecognitionArray.msg
+TrafficLightRecognition[]           detections
+
+

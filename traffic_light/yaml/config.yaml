@@ -1,0 +1,11 @@
+%YAML:1.0
+---
+CameraID : 4 
+# VideoPath: "/home/jetson/Documents/CV/ros2_project/ros2_cam/road_video.mp4"
+# VideoPath: "/home/jetson/Documents/CV/ros2_project/ros2_cam/shangqiu.mp4"
+VideoPath: "/home/jetson/Documents/CV/ros2_project/ros2_cam/tlr1.avi"
+EnginePath: "traffic_light/models/tlr_mmyolo.engine"
+EnginePath_: "traffic_light/models/yolov8s_e2e.engine"
+track_thresh: 0.5
+high_thresh: 0.4
+match_thresh: 0.7

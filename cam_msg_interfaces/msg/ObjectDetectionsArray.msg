@@ -1,0 +1,2 @@
+# ObjectDetectionsArray.msg
+ObjectDetection[]           detections

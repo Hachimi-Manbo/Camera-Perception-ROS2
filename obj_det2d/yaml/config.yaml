@@ -1,0 +1,9 @@
+%YAML:1.0
+---
+CameraID : 4 
+VideoPath: "/home/jetson/Documents/CV/ros2_project/ros2_cam/road_video.mp4"
+# EnginePath: "obj_det2d/models/yolov8s_e2e.engine"
+EnginePath: "obj_det2d/models/yolov8s_normal.engine"
+track_thresh: 0.5
+high_thresh: 0.4
+match_thresh: 0.7

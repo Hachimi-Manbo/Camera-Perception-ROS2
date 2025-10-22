@@ -1,0 +1,1 @@
+yolo export model=epoch_100_pth.pt format=onnx opset=11 simplify=True

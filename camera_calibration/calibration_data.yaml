@@ -1,0 +1,16 @@
+---
+CameraMatrix:
+  cols: 3
+  data: [978.079288700376, 0.0, 996.1371717521513, 0.0, 975.9671288330107, 521.1450752999336,
+    0.0, 0.0, 1.0]
+  dt: d
+  rows: 3
+DistortionCoeffs:
+  cols: 1
+  data: [-0.03800589882031582, -0.014788997947950525, 0.008163598657369977, -0.0023654731265608797]
+  dt: d
+  rows: 4
+Resolution height: 1080
+Resolution width: 1920
+calibration_time: 2024-12-10 16:20:19.575907
+model: Pin model

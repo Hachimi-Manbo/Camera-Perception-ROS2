@@ -1,0 +1,452 @@
+//
+// Created by ubuntu on 1/20/23.
+//
+#ifndef DETECT_RGB_YOLOV8_HPP
+#define DETECT_RGB_YOLOV8_HPP
+#include "NvInferPlugin.h"
+#include "common.hpp"
+#include <fstream>
+#include <map>
+
+/*
+This module using end-to-end yolov8 model, and the results return int (0-3)
+The DL model utilizes YOLOv8s official model, the label-9 refers to traffic light
+Then analyze the RGB info the bbox, returning the color of the traffic light.
+*/
+
+using namespace det;
+
+class YOLOv8_RGB {
+public:
+    explicit YOLOv8_RGB(const std::string& engine_file_path);
+    ~YOLOv8_RGB();
+
+    void                 make_pipe(bool warmup = true);
+    void                 copy_from_Mat(const cv::Mat& image);
+    void                 copy_from_Mat(const cv::Mat& image, cv::Size& size);
+    void                 letterbox(const cv::Mat& image, cv::Mat& out, cv::Size& size);
+    void                 infer();
+    void                 postprocess(std::vector<Object>& objs);
+    static void          draw_objects(const cv::Mat&                                image,
+                                      cv::Mat&                                      res,
+                                      const std::vector<Object>&                    objs,
+                                      const std::vector<std::string>&               CLASS_NAMES,
+                                      const std::vector<std::vector<unsigned int>>& COLORS);
+    void                 analyse_rgb(const cv::Mat& image, std::vector<Object>& objs);
+
+    int                  num_bindings;
+    int                  num_inputs  = 0;
+    int                  num_outputs = 0;
+    std::vector<Binding> input_bindings;
+    std::vector<Binding> output_bindings;
+    std::vector<void*>   host_ptrs;
+    std::vector<void*>   device_ptrs;
+
+    PreParam pparam;
+
+    const std::vector<std::string> CLASS_NAMES = {
+    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light",
+    "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
+    "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
+    "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard",
+    "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple",
+    "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
+    "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone",
+    "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear",
+    "hair drier", "toothbrush"};
+    const std::vector<std::vector<unsigned int>> COLORS = {
+    {  54,  67,  244 }, {  99,  30,  233 }, { 176,  39,  156 }, {  76,  189,  237 }, { 255,  52,   65 },
+    { 253,  193,   0 }, {  50,  205,  50 }, { 255,  246,   0 }, { 191,  239,   0 }, {   0,  100,   0 },
+    { 127,   0,   255 }, {  0, 255, 255 }, { 255, 255,   0 }, { 255,   0, 255 }, { 255, 140,   0 },
+    { 127, 127,   63 }, { 127,   0,   63 }, { 191, 127,   63 }, {  63, 191,   63 }, {  63,  63, 191 },
+    {  63,  63, 127 }, {  63, 127, 191 }, { 127,  63, 191 }, { 191,  63, 127 }, { 191, 127, 191 },
+    { 127, 191, 127 }, {  63, 191, 127 }, {  63, 127, 127 }, {  63,  63,  63 }, {  63,  63,  31 },
+    {  63,  31,  63 }, {  31,  63,  63 }, {  31,  63,  31 }, {  31,  31,  63 }, {  63,  31,  31 },
+    {  31,  31,  31 }, {  95,  63,  191 }, { 127,  63,  191 }, { 159,  63, 191 }, { 191,  63, 191 },
+    { 223,  63, 191 }, {  95,  95,  191 }, { 127,  95, 191 }, { 159,  95, 191 }, { 191,  95, 191 },
+    { 223,  95, 191 }, {  95, 127, 191 }, { 127, 127, 191 }, { 159, 127, 191 }, { 191, 127, 191 },
+    { 223, 127, 191 }, {  95, 159, 191 }, { 127, 159, 191 }, { 159, 159, 191 }, { 191, 159, 191 },
+    { 223, 159, 191 }, {  95, 191, 191 }, { 127, 191, 191 }, { 159, 191, 191 }, { 191, 191, 191 },
+    { 223, 191, 191 }, {  95, 223, 191 }, { 127, 223, 191 }, { 159, 223, 191 }, { 191, 223, 191 },
+    { 223, 223, 191 }, {  95, 255, 191 }, { 127, 255, 191 }, { 159, 255, 191 }, { 191, 255, 191 },
+    { 223, 255, 191 }, {  95, 191, 159 }, { 127, 191, 159 }, { 159, 191, 159 }, { 191, 191, 159 },
+    { 223, 191, 159 }, {  95, 191, 127 }, { 127, 191, 127 }, { 159, 191, 159 }, { 191, 191, 159 }};
+
+private:
+    nvinfer1::ICudaEngine*       engine  = nullptr;
+    nvinfer1::IRuntime*          runtime = nullptr;
+    nvinfer1::IExecutionContext* context = nullptr;
+    cudaStream_t                 stream  = nullptr;
+    Logger                       gLogger{nvinfer1::ILogger::Severity::kERROR};
+};
+
+YOLOv8_RGB::YOLOv8_RGB(const std::string& engine_file_path)
+{
+    std::ifstream file(engine_file_path, std::ios::binary);
+    assert(file.good());
+    file.seekg(0, std::ios::end);
+    auto size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    char* trtModelStream = new char[size];
+    assert(trtModelStream);
+    file.read(trtModelStream, size);
+    file.close();
+    initLibNvInferPlugins(&this->gLogger, "");
+    this->runtime = nvinfer1::createInferRuntime(this->gLogger);
+    assert(this->runtime != nullptr);
+
+    this->engine = this->runtime->deserializeCudaEngine(trtModelStream, size);
+    assert(this->engine != nullptr);
+    delete[] trtModelStream;
+    this->context = this->engine->createExecutionContext();
+
+    assert(this->context != nullptr);
+    cudaStreamCreate(&this->stream);
+
+#ifdef TRT_10
+    this->num_bindings = this->engine->getNbIOTensors();
+#else
+    this->num_bindings = this->num_bindings = this->engine->getNbBindings();
+#endif
+
+    for (int i = 0; i < this->num_bindings; ++i) {
+        Binding        binding;
+        nvinfer1::Dims dims;
+#ifdef TRT_10
+        std::string        name  = this->engine->getIOTensorName(i);
+        nvinfer1::DataType dtype = this->engine->getTensorDataType(name.c_str());
+#else
+        nvinfer1::DataType dtype = this->engine->getBindingDataType(i);
+        std::string        name  = this->engine->getBindingName(i);
+#endif
+        binding.name  = name;
+        binding.dsize = type_to_size(dtype);
+#ifdef TRT_10
+        bool IsInput = engine->getTensorIOMode(name.c_str()) == nvinfer1::TensorIOMode::kINPUT;
+#else
+        bool IsInput = engine->bindingIsInput(i);
+#endif
+        if (IsInput) {
+            this->num_inputs += 1;
+#ifdef TRT_10
+            dims = this->engine->getProfileShape(name.c_str(), 0, nvinfer1::OptProfileSelector::kMAX);
+            // set max opt shape
+            this->context->setInputShape(name.c_str(), dims);
+#else
+            dims = this->engine->getProfileDimensions(i, 0, nvinfer1::OptProfileSelector::kMAX);
+            // set max opt shape
+            this->context->setBindingDimensions(i, dims);
+#endif
+            binding.size = get_size_by_dims(dims);
+            binding.dims = dims;
+            this->input_bindings.push_back(binding);
+        }
+        else {
+#ifdef TRT_10
+            dims = this->context->getTensorShape(name.c_str());
+#else
+            dims = this->context->getBindingDimensions(i);
+#endif
+            binding.size = get_size_by_dims(dims);
+            binding.dims = dims;
+            this->output_bindings.push_back(binding);
+            this->num_outputs += 1;
+        }
+    }
+}
+
+YOLOv8_RGB::~YOLOv8_RGB()
+{
+#ifdef TRT_10
+    delete this->context;
+    delete this->engine;
+    delete this->runtime;
+#else
+    this->context->destroy();
+    this->engine->destroy();
+    this->runtime->destroy();
+#endif
+    cudaStreamDestroy(this->stream);
+    for (auto& ptr : this->device_ptrs) {
+        CHECK(cudaFree(ptr));
+    }
+
+    for (auto& ptr : this->host_ptrs) {
+        CHECK(cudaFreeHost(ptr));
+    }
+}
+void YOLOv8_RGB::make_pipe(bool warmup)
+{
+
+    for (auto& bindings : this->input_bindings) {
+        void* d_ptr;
+        CHECK(cudaMallocAsync(&d_ptr, bindings.size * bindings.dsize, this->stream));
+        this->device_ptrs.push_back(d_ptr);
+
+#ifdef TRT_10
+        auto name = bindings.name.c_str();
+        this->context->setInputShape(name, bindings.dims);
+        this->context->setTensorAddress(name, d_ptr);
+#endif
+    }
+
+    for (auto& bindings : this->output_bindings) {
+        void *d_ptr, *h_ptr;
+
+        size_t size = bindings.size * bindings.dsize;
+        CHECK(cudaMallocAsync(&d_ptr, size, this->stream));
+        CHECK(cudaHostAlloc(&h_ptr, size, 0));
+        this->device_ptrs.push_back(d_ptr);
+        this->host_ptrs.push_back(h_ptr);
+
+#ifdef TRT_10
+        auto name = bindings.name.c_str();
+        this->context->setTensorAddress(name, d_ptr);
+#endif
+    }
+
+    if (warmup) {
+        for (int i = 0; i < 10; i++) {
+            for (auto& bindings : this->input_bindings) {
+                size_t size  = bindings.size * bindings.dsize;
+                void*  h_ptr = malloc(size);
+                memset(h_ptr, 0, size);
+                CHECK(cudaMemcpyAsync(this->device_ptrs[0], h_ptr, size, cudaMemcpyHostToDevice, this->stream));
+                free(h_ptr);
+            }
+            this->infer();
+        }
+        printf("model warmup 10 times\n");
+    }
+}
+
+void YOLOv8_RGB::letterbox(const cv::Mat& image, cv::Mat& out, cv::Size& size)
+{
+    const float inp_h  = size.height;
+    const float inp_w  = size.width;
+    float       height = image.rows;
+    float       width  = image.cols;
+
+    float r    = std::min(inp_h / height, inp_w / width);
+    int   padw = std::round(width * r);
+    int   padh = std::round(height * r);
+
+    cv::Mat tmp;
+    if ((int)width != padw || (int)height != padh) {
+        cv::resize(image, tmp, cv::Size(padw, padh));
+    }
+    else {
+        tmp = image.clone();
+    }
+
+    float dw = inp_w - padw;
+    float dh = inp_h - padh;
+
+    dw /= 2.0f;
+    dh /= 2.0f;
+    int top    = int(std::round(dh - 0.1f));
+    int bottom = int(std::round(dh + 0.1f));
+    int left   = int(std::round(dw - 0.1f));
+    int right  = int(std::round(dw + 0.1f));
+
+    cv::copyMakeBorder(tmp, tmp, top, bottom, left, right, cv::BORDER_CONSTANT, {114, 114, 114});
+
+    out.create({1, 3, (int)inp_h, (int)inp_w}, CV_32F);
+
+    std::vector<cv::Mat> channels;
+    cv::split(tmp, channels);
+
+    cv::Mat c0((int)inp_h, (int)inp_w, CV_32F, (float*)out.data);
+    cv::Mat c1((int)inp_h, (int)inp_w, CV_32F, (float*)out.data + (int)inp_h * (int)inp_w);
+    cv::Mat c2((int)inp_h, (int)inp_w, CV_32F, (float*)out.data + (int)inp_h * (int)inp_w * 2);
+
+    channels[0].convertTo(c2, CV_32F, 1 / 255.f);
+    channels[1].convertTo(c1, CV_32F, 1 / 255.f);
+    channels[2].convertTo(c0, CV_32F, 1 / 255.f);
+
+    this->pparam.ratio  = 1 / r;
+    this->pparam.dw     = dw;
+    this->pparam.dh     = dh;
+    this->pparam.height = height;
+    this->pparam.width  = width;
+    ;
+}
+
+void YOLOv8_RGB::copy_from_Mat(const cv::Mat& image)
+{
+    cv::Mat  nchw;
+    auto&    in_binding = this->input_bindings[0];
+    int      width      = in_binding.dims.d[3];
+    int      height     = in_binding.dims.d[2];
+    cv::Size size{width, height};
+    this->letterbox(image, nchw, size);
+
+    CHECK(cudaMemcpyAsync(
+        this->device_ptrs[0], nchw.ptr<float>(), nchw.total() * nchw.elemSize(), cudaMemcpyHostToDevice, this->stream));
+
+#ifdef TRT_10
+    auto name = this->input_bindings[0].name.c_str();
+    this->context->setInputShape(name, nvinfer1::Dims{4, {1, 3, size.height, size.width}});
+    this->context->setTensorAddress(name, this->device_ptrs[0]);
+#else
+    this->context->setBindingDimensions(0, nvinfer1::Dims{4, {1, 3, height, width}});
+#endif
+}
+
+void YOLOv8_RGB::copy_from_Mat(const cv::Mat& image, cv::Size& size)
+{
+    cv::Mat nchw;
+    this->letterbox(image, nchw, size);
+
+    CHECK(cudaMemcpyAsync(
+        this->device_ptrs[0], nchw.ptr<float>(), nchw.total() * nchw.elemSize(), cudaMemcpyHostToDevice, this->stream));
+
+#ifdef TRT_10
+    auto name = this->input_bindings[0].name.c_str();
+    this->context->setInputShape(name, nvinfer1::Dims{4, {1, 3, size.height, size.width}});
+    this->context->setTensorAddress(name, this->device_ptrs[0]);
+#else
+    this->context->setBindingDimensions(0, nvinfer1::Dims{4, {1, 3, size.height, size.width}});
+#endif
+}
+
+void YOLOv8_RGB::infer()
+{
+#ifdef TRT_10
+    this->context->enqueueV3(this->stream);
+#else
+    this->context->enqueueV2(this->device_ptrs.data(), this->stream, nullptr);
+#endif
+    for (int i = 0; i < this->num_outputs; i++) {
+        size_t osize = this->output_bindings[i].size * this->output_bindings[i].dsize;
+        CHECK(cudaMemcpyAsync(
+            this->host_ptrs[i], this->device_ptrs[i + this->num_inputs], osize, cudaMemcpyDeviceToHost, this->stream));
+    }
+    cudaStreamSynchronize(this->stream);
+}
+
+void YOLOv8_RGB::postprocess(std::vector<Object>& objs)
+{
+    objs.clear();
+    int*  num_dets = static_cast<int*>(this->host_ptrs[0]);
+    auto* boxes    = static_cast<float*>(this->host_ptrs[1]);
+    auto* scores   = static_cast<float*>(this->host_ptrs[2]);
+    int*  labels   = static_cast<int*>(this->host_ptrs[3]);
+    auto& dw       = this->pparam.dw;
+    auto& dh       = this->pparam.dh;
+    auto& width    = this->pparam.width;
+    auto& height   = this->pparam.height;
+    auto& ratio    = this->pparam.ratio;
+    for (int i = 0; i < num_dets[0]; i++) {
+        float* ptr = boxes + i * 4;
+
+        float x0 = *ptr++ - dw;
+        float y0 = *ptr++ - dh;
+        float x1 = *ptr++ - dw;
+        float y1 = *ptr - dh;
+
+        x0 = clamp(x0 * ratio, 0.f, width);
+        y0 = clamp(y0 * ratio, 0.f, height);
+        x1 = clamp(x1 * ratio, 0.f, width);
+        y1 = clamp(y1 * ratio, 0.f, height);
+        Object obj;
+        obj.rect.x      = x0;
+        obj.rect.y      = y0;
+        obj.rect.width  = x1 - x0;
+        obj.rect.height = y1 - y0;
+        obj.prob        = *(scores + i);
+        obj.label       = *(labels + i);
+        if(obj.label == 9){
+            objs.push_back(obj);
+        }
+    }
+}
+
+void YOLOv8_RGB::draw_objects(const cv::Mat&                                image,
+                          cv::Mat&                                      res,
+                          const std::vector<Object>&                    objs,
+                          const std::vector<std::string>&               CLASS_NAMES,
+                          const std::vector<std::vector<unsigned int>>& COLORS)
+{
+    res = image.clone();
+    for (auto& obj : objs) {
+        cv::Scalar color = cv::Scalar(COLORS[obj.label][0], COLORS[obj.label][1], COLORS[obj.label][2]);
+        cv::rectangle(res, obj.rect, color, 2);
+
+        char text[256];
+        sprintf(text, "%s %.1f%%", CLASS_NAMES[obj.label].c_str(), obj.prob * 100);
+
+        int      baseLine   = 0;
+        cv::Size label_size = cv::getTextSize(text, cv::FONT_HERSHEY_SIMPLEX, 0.4, 1, &baseLine);
+
+        int x = (int)obj.rect.x;
+        int y = (int)obj.rect.y + 1;
+
+        if (y > res.rows) {
+            y = res.rows;
+        }
+
+        cv::rectangle(res, cv::Rect(x, y, label_size.width, label_size.height + baseLine), {0, 0, 255}, -1);
+
+        cv::putText(res, text, cv::Point(x, y + label_size.height), cv::FONT_HERSHEY_SIMPLEX, 0.4, {255, 255, 255}, 1);
+    }
+}
+
+void YOLOv8_RGB::analyse_rgb(const cv::Mat& image, std::vector<Object>& objs){
+    const cv::Scalar RED_LOW(0, 100, 100);  // 红色低阈值
+    const cv::Scalar RED_HIGH(10, 255, 255); // 红色高阈值
+    const cv::Scalar GREEN_LOW(35, 50, 50);  // 绿色低阈值
+    const cv::Scalar GREEN_HIGH(99, 255, 255); // 绿色高阈值
+    const cv::Scalar YELLOW_LOW(11, 100, 100); // 黄色低阈值
+    const cv::Scalar YELLOW_HIGH(35, 255, 255); // 黄色高阈值
+    const cv::Scalar BLACK_LOW(0, 0, 0); // 黑色低阈值
+    const cv::Scalar BLACK_HIGH(180, 255, 99); // 黑色高阈值
+
+    double colorThres = 0.12;
+
+    for (auto& obj : objs) {
+        cv::Rect lightRegion(obj.rect);
+        cv::Mat roi = image(lightRegion);
+        cv::Mat hsv;
+        cv::cvtColor(roi, hsv, cv::COLOR_BGR2HSV);
+
+        cv::Mat maskRed, maskGreen, maskYellow, maskBlack;
+        cv::inRange(hsv, RED_LOW, RED_HIGH, maskRed);
+        cv::inRange(hsv, GREEN_LOW, GREEN_HIGH, maskGreen);
+        cv::inRange(hsv, YELLOW_LOW, YELLOW_HIGH, maskYellow);
+        cv::inRange(hsv, BLACK_LOW, BLACK_HIGH, maskBlack);
+
+        int countRed = cv::countNonZero(maskRed);
+        int countGreen = cv::countNonZero(maskGreen);
+        int countYellow = cv::countNonZero(maskYellow);
+        int countBlack = cv::countNonZero(maskBlack);
+
+        // std::cout << "Red Number: " << countRed  << std::endl;
+        // std::cout << "Green Number: " << countGreen  << std::endl;
+        // std::cout << "Yellow Number: " << countYellow  << std::endl;
+        // std::cout << "Black Number: " << countBlack  << std::endl;
+
+        int maxCount = std::max({countRed, countGreen, countYellow});
+        
+        double colorRatio = double(maxCount)  / (double(countBlack) +1);
+        int manualLabel;
+
+        if (maxCount == countRed && colorRatio >= colorThres) {
+            manualLabel = 0;
+            std::cout << "Red" << std::endl;
+        } else if (maxCount == countGreen && colorRatio >= colorThres) {
+            manualLabel = 1;
+            std::cout << "Green" << std::endl;
+        } else if (maxCount == countYellow && colorRatio >= colorThres) {
+            manualLabel = 2;
+            std::cout << "Yellow" << std::endl;
+        } else {
+            manualLabel = 3;
+            std::cout << "Unknown" << std::endl;
+        }
+        obj.label = manualLabel;
+            std::cout << "---------------------RGB--------------" << std::endl;
+
+    }
+}
+#endif  // DETECT_RGB_YOLOV8_HPP
